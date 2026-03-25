@@ -1,0 +1,21 @@
+{
+    "name": "axcherednikov/eventloop",
+    "type": "php-ext",
+    "license": "MIT",
+    "description": "Native PHP extension providing a high-performance event loop with epoll/kqueue/poll support. API-compatible with Revolt.",
+    "require": {
+        "php": ">=8.1"
+    },
+    "php-ext": {
+        "extension-name": "eventloop",
+        "priority": 80,
+        "support-zts": true,
+        "support-nts": true,
+        "configure-options": [
+            {
+                "name": "enable-eventloop",
+                "description": "Enable EventLoop support"
+            }
+        ]
+    }
+}
