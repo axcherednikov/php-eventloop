@@ -23,6 +23,14 @@ The API surface mirrors Revolt's, so migrating between the two is straightforwar
 
 ## Installation
 
+### Via PIE (recommended)
+
+```bash
+pie install axcherednikov/eventloop
+```
+
+### From source
+
 ```bash
 git clone https://github.com/axcherednikov/php-eventloop.git
 cd php-eventloop
