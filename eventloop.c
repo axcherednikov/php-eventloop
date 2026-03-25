@@ -23,6 +23,7 @@
 # include <signal.h>
 #endif
 
+#include "php_eventloop_compat.h"
 #include "eventloop_arginfo.h"
 
 ZEND_DECLARE_MODULE_GLOBALS(eventloop)

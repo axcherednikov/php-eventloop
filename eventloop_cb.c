@@ -9,9 +9,9 @@
 static zend_string *eventloop_generate_id(void)
 {
 	char buf[24];
-	int len;
 
-	len = snprintf(buf, sizeof(buf), "eL%" PRIx64, EVENTLOOP_G(next_id)++);
+	int len = snprintf(buf, sizeof(buf), "eL%" PRIx64, EVENTLOOP_G(next_id)++);
+
 	return zend_string_init(buf, len, 0);
 }
 
