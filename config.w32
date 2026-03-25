@@ -1,0 +1,9 @@
+ARG_ENABLE("eventloop", "EventLoop support", "no");
+
+if (PHP_EVENTLOOP != "no") {
+	EXTENSION("eventloop",
+		"eventloop.c eventloop_cb.c eventloop_timer.c eventloop_suspension.c drivers\\select.c",
+		PHP_EVENTLOOP_SHARED);
+
+	AC_DEFINE("HAVE_EVENTLOOP", 1, "EventLoop support");
+}
