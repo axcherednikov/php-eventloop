@@ -12,6 +12,7 @@
 #ifdef HAVE_FIBERS
 #include "zend_exceptions.h"
 #include "zend_enum.h"
+#include "php_eventloop_compat.h"
 #include "eventloop_arginfo.h"
 
 typedef struct _eventloop_suspension_obj {
@@ -40,6 +41,8 @@ static zend_object *suspension_create_object(zend_class_entry *ce)
 
 	zend_object_std_init(&suspension->std, ce);
 	object_properties_init(&suspension->std, ce);
+
+	suspension->std.handlers = &suspension_object_handlers;
 
 	ZVAL_NULL(&suspension->fiber_zv);
 	suspension->pending = false;
@@ -207,7 +210,7 @@ void eventloop_suspension_init(void)
 {
 	eventloop_suspension_ce = register_class_EventLoop_Suspension();
 	eventloop_suspension_ce->create_object = suspension_create_object;
-	eventloop_suspension_ce->default_object_handlers = &suspension_object_handlers;
+	EVENTLOOP_SET_DEFAULT_HANDLERS(eventloop_suspension_ce, &suspension_object_handlers);
 
 	memcpy(&suspension_object_handlers, zend_get_std_object_handlers(),
 		sizeof(zend_object_handlers));
