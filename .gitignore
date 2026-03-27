@@ -38,6 +38,7 @@ run-tests.php
 *.swp
 *.swo
 *~
+php_test_results_*.txt
 .idea/
 .vscode/
 

@@ -196,11 +196,11 @@ Revolt v1.0.8 tested with all four available drivers ([StreamSelect, Ev, Event, 
 
 | Benchmark | Revolt StreamSelect | Revolt Ev | Revolt Event | Revolt UV | ext-eventloop |
 |---|--:|--:|--:|--:|--:|
-| `defer()` | 755,979 ops/sec | 726,468 ops/sec | 741,084 ops/sec | 730,488 ops/sec | **3,696,132 ops/sec** |
-| `delay(0)` | 245,389 ops/sec | 480,866 ops/sec | 467,362 ops/sec | 185,068 ops/sec | **3,041,443 ops/sec** |
-| `repeat(0)` | 694,763 ops/sec | 712,077 ops/sec | 74,929 ops/sec | 73,899 ops/sec | **17,971,855 ops/sec** |
-| I/O register + cancel | 2,149,497 ops/sec | 2,056,740 ops/sec | 2,034,001 ops/sec | 2,000,214 ops/sec | **7,642,510 ops/sec** |
-| Fiber suspend/resume | 219,349 ops/sec | 217,095 ops/sec | 220,924 ops/sec | 215,305 ops/sec | **242,691 ops/sec** |
+| `defer()` | 765,598 ops/sec | 743,057 ops/sec | 733,417 ops/sec | 742,926 ops/sec | **3,658,412 ops/sec** |
+| `delay(0)` | 242,383 ops/sec | 486,501 ops/sec | 464,196 ops/sec | 183,585 ops/sec | **3,047,625 ops/sec** |
+| `repeat(0)` | 687,196 ops/sec | 707,010 ops/sec | 74,708 ops/sec | 73,491 ops/sec | **17,371,529 ops/sec** |
+| I/O register + cancel | 2,114,361 ops/sec | 2,003,474 ops/sec | 1,980,326 ops/sec | 1,953,935 ops/sec | **7,193,404 ops/sec** |
+| Fiber suspend/resume | 221,383 ops/sec | 220,659 ops/sec | 218,318 ops/sec | 220,244 ops/sec | **243,242 ops/sec** |
 
 > These benchmarks measure callback dispatch and scheduling throughput. The I/O backend (StreamSelect, Ev, Event, UV) primarily affects polling efficiency at high concurrency, not dispatch speed — that's why all four Revolt drivers show similar numbers here. ext-eventloop moves the entire dispatch path into C, which is where the difference comes from. Fiber performance is nearly identical because `suspend()`/`resume()` is handled by the Zend Engine directly.
 >

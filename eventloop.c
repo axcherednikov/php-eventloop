@@ -571,6 +571,7 @@ ZEND_METHOD(EventLoop_EventLoop, onReadable)
 		}
 	}
 
+	EVENTLOOP_G(io_watcher_count)++;
 	RETURN_STR_COPY(cb->id);
 }
 /* }}} */
@@ -605,6 +606,7 @@ ZEND_METHOD(EventLoop_EventLoop, onWritable)
 		}
 	}
 
+	EVENTLOOP_G(io_watcher_count)++;
 	RETURN_STR_COPY(cb->id);
 }
 /* }}} */
@@ -917,9 +919,13 @@ ZEND_METHOD(EventLoop_EventLoop, run)
 			}
 		}
 
-		EVENTLOOP_G(driver)->poll(timeout);
-		if (EVENTLOOP_G(stopped)) {
-			break;
+		/* Skip the syscall when there are no I/O watchers — avoids
+		 * unnecessary kevent()/epoll_wait()/poll() overhead on every tick */
+		if (EVENTLOOP_G(io_watcher_count) > 0 || timeout > 0) {
+			EVENTLOOP_G(driver)->poll(timeout);
+			if (EVENTLOOP_G(stopped)) {
+				break;
+			}
 		}
 
 		eventloop_process_timers();
@@ -1086,6 +1092,7 @@ PHP_RINIT_FUNCTION(eventloop)
 
 	EVENTLOOP_G(driver) = NULL;
 	EVENTLOOP_G(next_id) = 1;
+	EVENTLOOP_G(io_watcher_count) = 0;
 	EVENTLOOP_G(running) = false;
 	EVENTLOOP_G(stopped) = false;
 	ZVAL_NULL(&EVENTLOOP_G(error_handler));

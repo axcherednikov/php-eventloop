@@ -118,6 +118,7 @@ ZEND_BEGIN_MODULE_GLOBALS(eventloop)
 	eventloop_driver *driver;
 
 	uint64_t next_id;
+	uint32_t io_watcher_count;
 	bool running;
 	bool stopped;
 

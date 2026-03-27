@@ -118,6 +118,10 @@ void eventloop_cb_cancel(eventloop_callback *cb)
 		return;
 	}
 
+	if (cb->type == EVENTLOOP_CB_READABLE || cb->type == EVENTLOOP_CB_WRITABLE) {
+		EVENTLOOP_G(io_watcher_count)--;
+	}
+
 	eventloop_cb_disable(cb);
 	cb->flags |= EVENTLOOP_CB_FLAG_CANCELLED;
 	cb->flags &= ~EVENTLOOP_CB_FLAG_ENABLED;
