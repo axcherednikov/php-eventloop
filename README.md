@@ -191,18 +191,20 @@ echo EventLoop::getDriver(); // "epoll" on Linux, "kqueue" on macOS
 
 ## Benchmarks
 
-**Environment:** PHP 8.5.4, Apple M1 Max, macOS, 100,000 iterations.
-Revolt v1.0.8 with StreamSelectDriver (default, no ext-ev/ext-uv). ext-eventloop using kqueue driver.
+**Environment:** PHP 8.5.4, Apple M1 Max, macOS, 100,000 iterations (average of 3 runs).
+Revolt v1.0.8 tested with all four available drivers ([StreamSelect, Ev, Event, UV](https://revolt.run/extensions)). ext-eventloop using kqueue driver.
 
-| Benchmark | Revolt | ext-eventloop | Speedup |
-|---|--:|--:|--:|
-| `defer()` dispatch | 715,053 ops/sec | 3,712,263 ops/sec | **5.2x** |
-| `delay(0)` dispatch | 234,229 ops/sec | 2,832,500 ops/sec | **12.1x** |
-| `repeat()` dispatch | 679,452 ops/sec | 17,794,516 ops/sec | **26.2x** |
-| I/O register + cancel | 2,109,267 ops/sec | 7,635,677 ops/sec | **3.6x** |
-| Fiber suspend/resume | 221,776 ops/sec | 248,738 ops/sec | **1.1x** |
+| Benchmark | Revolt StreamSelect | Revolt Ev | Revolt Event | Revolt UV | ext-eventloop |
+|---|--:|--:|--:|--:|--:|
+| `defer()` | 755,979 ops/sec | 726,468 ops/sec | 741,084 ops/sec | 730,488 ops/sec | **3,696,132 ops/sec** |
+| `delay(0)` | 245,389 ops/sec | 480,866 ops/sec | 467,362 ops/sec | 185,068 ops/sec | **3,041,443 ops/sec** |
+| `repeat(0)` | 694,763 ops/sec | 712,077 ops/sec | 74,929 ops/sec | 73,899 ops/sec | **17,971,855 ops/sec** |
+| I/O register + cancel | 2,149,497 ops/sec | 2,056,740 ops/sec | 2,034,001 ops/sec | 2,000,214 ops/sec | **7,642,510 ops/sec** |
+| Fiber suspend/resume | 219,349 ops/sec | 217,095 ops/sec | 220,924 ops/sec | 215,305 ops/sec | **242,691 ops/sec** |
 
-> **Note:** Revolt was tested with its default StreamSelectDriver. With ext-ev or ext-uv backends, Revolt's I/O performance would be higher, though callback dispatch overhead remains in PHP userland. Fiber performance is nearly identical because `suspend()`/`resume()` is handled by the Zend Engine in both cases.
+> These benchmarks measure callback dispatch and scheduling throughput. The I/O backend (StreamSelect, Ev, Event, UV) primarily affects polling efficiency at high concurrency, not dispatch speed — that's why all four Revolt drivers show similar numbers here. ext-eventloop moves the entire dispatch path into C, which is where the difference comes from. Fiber performance is nearly identical because `suspend()`/`resume()` is handled by the Zend Engine directly.
+>
+> **[Run the benchmarks yourself →](benchmark/)**
 
 ## Migrating from Revolt
 

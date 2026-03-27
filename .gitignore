@@ -41,6 +41,9 @@ run-tests.php
 .idea/
 .vscode/
 
-# tmp/ is tracked (benchmarks), but ignore vendor inside it
-tmp/vendor/
-tmp/composer.lock
+# Benchmark dependencies
+benchmark/vendor/
+benchmark/composer.lock
+
+# Legacy tmp
+tmp/
