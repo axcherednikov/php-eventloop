@@ -18,6 +18,8 @@
 #else
 # include <sys/time.h>
 #endif
+# include <math.h>
+# include <limits.h>
 
 #ifndef PHP_WIN32
 # include <signal.h>
@@ -36,6 +38,8 @@ zend_class_entry *eventloop_suspension_ce;
 #endif
 
 static zval callback_type_cases[6];
+
+#define EVENTLOOP_MAX_TIMER_SECONDS ((double)INT_MAX / 1000.0)
 
 /* {{{ eventloop_now */
 double eventloop_now(void)
@@ -463,6 +467,27 @@ static eventloop_callback *eventloop_find_or_throw(zend_string *id)
 	return cb;
 }
 
+static bool eventloop_validate_timer_value(double value)
+{
+	if (UNEXPECTED(!isfinite(value))) {
+		zend_argument_value_error(1, "must be finite, %f given", value);
+		return false;
+	}
+
+	if (UNEXPECTED(value < 0)) {
+		zend_argument_value_error(1, "must be non-negative, %f given", value);
+		return false;
+	}
+
+	if (UNEXPECTED(value > EVENTLOOP_MAX_TIMER_SECONDS)) {
+		zend_argument_value_error(1, "must be less than or equal to %f, %f given",
+			EVENTLOOP_MAX_TIMER_SECONDS, value);
+		return false;
+	}
+
+	return true;
+}
+
 static php_socket_t eventloop_stream_to_fd(zval *stream_zv)
 {
 	php_stream *stream;
@@ -561,8 +586,7 @@ ZEND_METHOD(EventLoop_EventLoop, delay)
 		Z_PARAM_OBJECT_OF_CLASS(closure, zend_ce_closure)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (UNEXPECTED(delay < 0)) {
-		zend_argument_value_error(1, "must be non-negative, %f given", delay);
+	if (!eventloop_validate_timer_value(delay)) {
 		RETURN_THROWS();
 	}
 
@@ -588,8 +612,7 @@ ZEND_METHOD(EventLoop_EventLoop, repeat)
 		Z_PARAM_OBJECT_OF_CLASS(closure, zend_ce_closure)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (UNEXPECTED(interval < 0)) {
-		zend_argument_value_error(1, "must be non-negative, %f given", interval);
+	if (!eventloop_validate_timer_value(interval)) {
 		RETURN_THROWS();
 	}
 
