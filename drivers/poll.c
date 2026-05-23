@@ -55,7 +55,25 @@ static int eventloop_poll_add(eventloop_callback *cb)
 {
 	uint32_t idx;
 	zend_ulong key;
+	zval *idx_zv;
 	zval zv;
+
+	/* Store index for quick removal. Use a composite key: fd + type to allow
+	 * both readable and writable on the same fd. */
+	key = ((zend_ulong)cb->io.fd << 1) | (cb->type == EVENTLOOP_CB_WRITABLE ? 1 : 0);
+	idx_zv = zend_hash_index_find(&fd_to_index, key);
+	if (idx_zv) {
+		idx = (uint32_t)Z_LVAL_P(idx_zv);
+		pollfds[idx].fd = cb->io.fd;
+		pollfds[idx].events = (cb->type == EVENTLOOP_CB_READABLE) ? POLLIN : POLLOUT;
+		pollfds[idx].revents = 0;
+
+		if (pollfd_cbs[idx] != cb) {
+			pollfd_cbs[idx] = cb;
+		}
+
+		return SUCCESS;
+	}
 
 	if (pollfds_size >= pollfds_capacity) {
 		pollfds_capacity *= 2;
@@ -69,9 +87,6 @@ static int eventloop_poll_add(eventloop_callback *cb)
 	pollfds[idx].revents = 0;
 	pollfd_cbs[idx] = cb;
 
-	/* Store index for quick removal. Use a composite key: fd + type to allow
-	 * both readable and writable on the same fd. */
-	key = ((zend_ulong)cb->io.fd << 1) | (cb->type == EVENTLOOP_CB_WRITABLE ? 1 : 0);
 	ZVAL_LONG(&zv, idx);
 	zend_hash_index_update(&fd_to_index, key, &zv);
 
@@ -111,6 +126,7 @@ static void eventloop_poll_remove(eventloop_callback *cb)
 		ZVAL_LONG(&zv, idx);
 		zend_hash_index_update(&fd_to_index, moved_key, &zv);
 	}
+	pollfd_cbs[pollfds_size] = NULL;
 }
 
 static int eventloop_poll_poll(double timeout)
@@ -119,6 +135,8 @@ static int eventloop_poll_poll(double timeout)
 	int ret;
 	uint32_t n;
 	uint32_t i;
+	uint32_t ready_count = 0;
+	eventloop_callback **ready;
 
 	if (pollfds_size == 0) {
 		/* No fds to poll -- just sleep for the timeout duration */
@@ -150,12 +168,20 @@ static int eventloop_poll_poll(double timeout)
 	/* Dispatch events. Iterate a snapshot of the current size since
 	 * callbacks may modify the array. */
 	n = pollfds_size;
+	ready = safe_emalloc(n, sizeof(eventloop_callback *), 0);
 	for (i = 0; i < n && i < pollfds_size; i++) {
 		if (pollfds[i].revents != 0) {
-			eventloop_dispatch_callback(pollfd_cbs[i]);
+			eventloop_cb_addref(pollfd_cbs[i]);
+			ready[ready_count++] = pollfd_cbs[i];
 			pollfds[i].revents = 0;
 		}
 	}
+
+	for (i = 0; i < ready_count; i++) {
+		eventloop_dispatch_callback(ready[i]);
+		eventloop_cb_release(ready[i]);
+	}
+	efree(ready);
 
 	return ret;
 }

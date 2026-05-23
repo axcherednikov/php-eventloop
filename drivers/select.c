@@ -23,6 +23,18 @@ static php_socket_t max_fd;
 static HashTable read_cbs;
 static HashTable write_cbs;
 
+static void select_ready_push(eventloop_callback ***ready, uint32_t *count,
+	uint32_t *capacity, eventloop_callback *cb)
+{
+	if (*count >= *capacity) {
+		*capacity = *capacity ? *capacity * 2 : 8;
+		*ready = erealloc(*ready, sizeof(eventloop_callback *) * *capacity);
+	}
+
+	eventloop_cb_addref(cb);
+	(*ready)[(*count)++] = cb;
+}
+
 static int eventloop_select_init(void)
 {
 	FD_ZERO(&read_fds);
@@ -85,7 +97,11 @@ static int eventloop_select_poll(double timeout)
 	fd_set tmp_read, tmp_write;
 	struct timeval tv;
 	eventloop_callback *cb;
+	eventloop_callback **ready = NULL;
 	zend_ulong fd;
+	uint32_t ready_count = 0;
+	uint32_t ready_capacity = 0;
+	uint32_t i;
 	int ret;
 
 	memcpy(&tmp_read, &read_fds, sizeof(fd_set));
@@ -118,16 +134,24 @@ static int eventloop_select_poll(double timeout)
 	/* Dispatch readable events */
 	ZEND_HASH_FOREACH_NUM_KEY_PTR(&read_cbs, fd, cb) {
 		if (FD_ISSET((php_socket_t)fd, &tmp_read)) {
-			eventloop_dispatch_callback(cb);
+			select_ready_push(&ready, &ready_count, &ready_capacity, cb);
 		}
 	} ZEND_HASH_FOREACH_END();
 
 	/* Dispatch writable events */
 	ZEND_HASH_FOREACH_NUM_KEY_PTR(&write_cbs, fd, cb) {
 		if (FD_ISSET((php_socket_t)fd, &tmp_write)) {
-			eventloop_dispatch_callback(cb);
+			select_ready_push(&ready, &ready_count, &ready_capacity, cb);
 		}
 	} ZEND_HASH_FOREACH_END();
+
+	for (i = 0; i < ready_count; i++) {
+		eventloop_dispatch_callback(ready[i]);
+		eventloop_cb_release(ready[i]);
+	}
+	if (ready) {
+		efree(ready);
+	}
 
 	return ret;
 }
