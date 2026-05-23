@@ -230,6 +230,10 @@ make test
 
 The extension ships with 31 `.phpt` tests covering defer, delay, repeat, I/O watchers, signals, suspensions, error handling, and edge cases.
 
+## Changelog
+
+Release notes are available in [CHANGELOG.md](CHANGELOG.md).
+
 ## Acknowledgements
 
 This project is built on the ideas and API design of [Revolt](https://github.com/revoltphp/event-loop) by Aaron Piotrowski, Niklas Keller, and contributors. Revolt's clean, well-thought-out API made it the natural foundation for a native implementation. Full credit to the Revolt team for defining the contract that this extension follows.
