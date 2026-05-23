@@ -296,7 +296,10 @@ void eventloop_process_timers(void)
 
 		if (cb->type == EVENTLOOP_CB_REPEAT) {
 			cb->repeat.expiry = now + cb->repeat.interval;
-			eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb);
+			if (!eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb)) {
+				EVENTLOOP_G(stopped) = true;
+				break;
+			}
 		}
 
 		eventloop_dispatch_callback(cb);
@@ -488,6 +491,27 @@ static bool eventloop_validate_timer_value(double value)
 	return true;
 }
 
+static bool eventloop_next_capacity(uint32_t current, uint32_t initial,
+	size_t element_size, uint32_t *next, const char *name)
+{
+	if (current == 0) {
+		*next = initial;
+	} else {
+		if (UNEXPECTED(current > UINT32_MAX / 2)) {
+			zend_throw_error(NULL, "EventLoop %s capacity exceeded", name);
+			return false;
+		}
+		*next = current * 2;
+	}
+
+	if (UNEXPECTED(*next > SIZE_MAX / element_size)) {
+		zend_throw_error(NULL, "EventLoop %s allocation size exceeded", name);
+		return false;
+	}
+
+	return true;
+}
+
 static php_socket_t eventloop_stream_to_fd(zval *stream_zv)
 {
 	php_stream *stream;
@@ -519,6 +543,7 @@ ZEND_METHOD(EventLoop_EventLoop, queue)
 	uint32_t argc;
 	eventloop_microtask *mt;
 	uint32_t i;
+	uint32_t new_capacity;
 	zval tmp;
 
 	ZEND_PARSE_PARAMETERS_START(1, -1)
@@ -527,8 +552,11 @@ ZEND_METHOD(EventLoop_EventLoop, queue)
 	ZEND_PARSE_PARAMETERS_END();
 
 	if (EVENTLOOP_G(microtask_count) >= EVENTLOOP_G(microtask_capacity)) {
-		EVENTLOOP_G(microtask_capacity) = EVENTLOOP_G(microtask_capacity) ?
-			EVENTLOOP_G(microtask_capacity) * 2 : 8;
+		if (!eventloop_next_capacity(EVENTLOOP_G(microtask_capacity), 8,
+		    sizeof(eventloop_microtask), &new_capacity, "microtask queue")) {
+			RETURN_THROWS();
+		}
+		EVENTLOOP_G(microtask_capacity) = new_capacity;
 		EVENTLOOP_G(microtask_queue) = erealloc(EVENTLOOP_G(microtask_queue),
 			sizeof(eventloop_microtask) * EVENTLOOP_G(microtask_capacity));
 	}
@@ -553,6 +581,7 @@ ZEND_METHOD(EventLoop_EventLoop, defer)
 {
 	zval *closure;
 	eventloop_callback *cb;
+	uint32_t new_capacity;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
 		Z_PARAM_OBJECT_OF_CLASS(closure, zend_ce_closure)
@@ -561,8 +590,12 @@ ZEND_METHOD(EventLoop_EventLoop, defer)
 	cb = eventloop_cb_create(EVENTLOOP_CB_DEFER, closure);
 
 	if (EVENTLOOP_G(deferred_count) >= EVENTLOOP_G(deferred_capacity)) {
-		EVENTLOOP_G(deferred_capacity) = EVENTLOOP_G(deferred_capacity) ?
-			EVENTLOOP_G(deferred_capacity) * 2 : 8;
+		if (!eventloop_next_capacity(EVENTLOOP_G(deferred_capacity), 8,
+		    sizeof(zend_string *), &new_capacity, "deferred queue")) {
+			eventloop_cb_cancel(cb);
+			RETURN_THROWS();
+		}
+		EVENTLOOP_G(deferred_capacity) = new_capacity;
 		EVENTLOOP_G(deferred_queue) = erealloc(EVENTLOOP_G(deferred_queue),
 			sizeof(zend_string *) * EVENTLOOP_G(deferred_capacity));
 	}
@@ -594,7 +627,10 @@ ZEND_METHOD(EventLoop_EventLoop, delay)
 	cb->delay.delay = delay;
 	cb->delay.expiry = eventloop_now() + delay;
 
-	eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb);
+	if (!eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb)) {
+		eventloop_cb_cancel(cb);
+		RETURN_THROWS();
+	}
 
 	RETURN_STR_COPY(cb->id);
 }
@@ -620,7 +656,10 @@ ZEND_METHOD(EventLoop_EventLoop, repeat)
 	cb->repeat.interval = interval;
 	cb->repeat.expiry = eventloop_now() + interval;
 
-	eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb);
+	if (!eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb)) {
+		eventloop_cb_cancel(cb);
+		RETURN_THROWS();
+	}
 
 	RETURN_STR_COPY(cb->id);
 }
@@ -762,6 +801,9 @@ ZEND_METHOD(EventLoop_EventLoop, enable)
 	}
 
 	eventloop_cb_enable(cb);
+	if (UNEXPECTED(EG(exception))) {
+		RETURN_THROWS();
+	}
 	RETURN_STR_COPY(id);
 }
 /* }}} */
