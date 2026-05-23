@@ -162,7 +162,7 @@ void eventloop_signal_callback_cancelled(eventloop_callback *cb);
 /* Timer heap */
 void eventloop_timer_heap_init(eventloop_timer_heap *heap);
 void eventloop_timer_heap_destroy(eventloop_timer_heap *heap);
-void eventloop_timer_heap_push(eventloop_timer_heap *heap, eventloop_callback *cb);
+bool eventloop_timer_heap_push(eventloop_timer_heap *heap, eventloop_callback *cb);
 eventloop_callback *eventloop_timer_heap_peek(const eventloop_timer_heap *heap);
 eventloop_callback *eventloop_timer_heap_pop(eventloop_timer_heap *heap);
 void eventloop_timer_heap_remove(eventloop_timer_heap *heap, eventloop_callback *cb);

@@ -91,11 +91,15 @@ void eventloop_cb_enable(eventloop_callback *cb)
 			break;
 		case EVENTLOOP_CB_DELAY:
 			cb->delay.expiry = eventloop_now() + cb->delay.delay;
-			eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb);
+			if (!eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb)) {
+				cb->flags &= ~EVENTLOOP_CB_FLAG_ENABLED;
+			}
 			break;
 		case EVENTLOOP_CB_REPEAT:
 			cb->repeat.expiry = eventloop_now() + cb->repeat.interval;
-			eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb);
+			if (!eventloop_timer_heap_push(&EVENTLOOP_G(timer_heap), cb)) {
+				cb->flags &= ~EVENTLOOP_CB_FLAG_ENABLED;
+			}
 			break;
 		default:
 			break;

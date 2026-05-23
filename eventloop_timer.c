@@ -7,6 +7,22 @@
 
 #define TIMER_HEAP_INITIAL_CAPACITY 16
 
+static bool timer_heap_next_capacity(uint32_t current, uint32_t *next)
+{
+	if (UNEXPECTED(current > UINT32_MAX / 2)) {
+		zend_throw_error(NULL, "EventLoop timer heap capacity exceeded");
+		return false;
+	}
+
+	*next = current * 2;
+	if (UNEXPECTED((size_t)*next > SIZE_MAX / sizeof(eventloop_callback *))) {
+		zend_throw_error(NULL, "EventLoop timer heap allocation size exceeded");
+		return false;
+	}
+
+	return true;
+}
+
 static inline double timer_expiry(const eventloop_callback *cb)
 {
 	if (cb->type == EVENTLOOP_CB_DELAY) {
@@ -87,12 +103,17 @@ void eventloop_timer_heap_destroy(eventloop_timer_heap *heap)
 	heap->capacity = 0;
 }
 
-void eventloop_timer_heap_push(eventloop_timer_heap *heap, eventloop_callback *cb)
+bool eventloop_timer_heap_push(eventloop_timer_heap *heap, eventloop_callback *cb)
 {
+	uint32_t new_capacity;
+
 	ZEND_ASSERT(heap->data != NULL);
 
 	if (heap->size >= heap->capacity) {
-		heap->capacity *= 2;
+		if (!timer_heap_next_capacity(heap->capacity, &new_capacity)) {
+			return false;
+		}
+		heap->capacity = new_capacity;
 		heap->data = erealloc(heap->data, sizeof(eventloop_callback *) * heap->capacity);
 	}
 
@@ -101,6 +122,8 @@ void eventloop_timer_heap_push(eventloop_timer_heap *heap, eventloop_callback *c
 	heap->size++;
 
 	heap_sift_up(heap, cb->heap_index);
+
+	return true;
 }
 
 eventloop_callback *eventloop_timer_heap_peek(const eventloop_timer_heap *heap)
