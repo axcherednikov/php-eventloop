@@ -94,7 +94,7 @@ static int eventloop_kqueue_add(eventloop_callback *cb)
 	}
 
 	/* Defer the syscall — will be flushed in poll() */
-	kq_changelist_push(cb->io.fd, filter, EV_ADD | EV_CLEAR, cb);
+	kq_changelist_push(cb->io.fd, filter, EV_ADD | EV_CLEAR, NULL);
 
 	return SUCCESS;
 }
@@ -121,6 +121,7 @@ static int eventloop_kqueue_poll(double timeout)
 	int ret;
 	int i;
 	eventloop_callback *cb;
+	HashTable *callbacks;
 
 	if (timeout < 0) {
 		ts.tv_sec = 1;
@@ -142,9 +143,16 @@ static int eventloop_kqueue_poll(double timeout)
 	}
 
 	for (i = 0; i < ret; i++) {
-		cb = (eventloop_callback *)kq_events[i].udata;
-		if (cb && (cb->flags & EVENTLOOP_CB_FLAG_ENABLED) &&
-		    !(cb->flags & EVENTLOOP_CB_FLAG_CANCELLED)) {
+		if (kq_events[i].filter == EVFILT_READ) {
+			callbacks = &kq_read_cbs;
+		} else if (kq_events[i].filter == EVFILT_WRITE) {
+			callbacks = &kq_write_cbs;
+		} else {
+			continue;
+		}
+
+		cb = zend_hash_index_find_ptr(callbacks, (zend_ulong)kq_events[i].ident);
+		if (cb) {
 			eventloop_dispatch_callback(cb);
 		}
 	}
