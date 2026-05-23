@@ -109,6 +109,7 @@ ZEND_BEGIN_MODULE_GLOBALS(eventloop)
 	uint32_t deferred_capacity;
 
 	eventloop_microtask *microtask_queue;
+	uint32_t microtask_head;
 	uint32_t microtask_count;
 	uint32_t microtask_capacity;
 
