@@ -228,7 +228,7 @@ If you use `Revolt\EventLoop\Suspension`:
 make test
 ```
 
-The extension ships with 26 `.phpt` tests covering defer, delay, repeat, I/O watchers, signals, suspensions, error handling, and edge cases.
+The extension ships with 27 `.phpt` tests covering defer, delay, repeat, I/O watchers, signals, suspensions, error handling, and edge cases.
 
 ## Acknowledgements
 

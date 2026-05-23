@@ -89,19 +89,25 @@ eventloop_driver *eventloop_select_best_driver(void)
 /* {{{ eventloop_dispatch_callback */
 void eventloop_dispatch_callback(eventloop_callback *cb)
 {
+	eventloop_cb_type type;
 	zval retval;
 	zval params[1];
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
 	char *errstr = NULL;
 
+	eventloop_cb_addref(cb);
+
 	if (UNEXPECTED(!(cb->flags & EVENTLOOP_CB_FLAG_ENABLED) ||
 	    (cb->flags & EVENTLOOP_CB_FLAG_CANCELLED))) {
+		eventloop_cb_release(cb);
 		return;
 	}
 
+	type = cb->type;
+
 	/* For defer/delay: auto-cancel after execution */
-	if (cb->type == EVENTLOOP_CB_DEFER || cb->type == EVENTLOOP_CB_DELAY) {
+	if (type == EVENTLOOP_CB_DEFER || type == EVENTLOOP_CB_DELAY) {
 		cb->flags &= ~EVENTLOOP_CB_FLAG_ENABLED;
 		cb->flags |= EVENTLOOP_CB_FLAG_CANCELLED;
 	}
@@ -114,6 +120,7 @@ void eventloop_dispatch_callback(eventloop_callback *cb)
 			efree(errstr);
 		}
 		zval_ptr_dtor(params);
+		eventloop_cb_release(cb);
 		return;
 	}
 
@@ -161,9 +168,11 @@ void eventloop_dispatch_callback(eventloop_callback *cb)
 
 	zval_ptr_dtor(params);
 
-	if (cb->type == EVENTLOOP_CB_DEFER || cb->type == EVENTLOOP_CB_DELAY) {
+	if (type == EVENTLOOP_CB_DEFER || type == EVENTLOOP_CB_DELAY) {
 		zend_hash_del(&EVENTLOOP_G(callbacks), cb->id);
 	}
+
+	eventloop_cb_release(cb);
 }
 /* }}} */
 
@@ -1025,7 +1034,7 @@ ZEND_METHOD(EventLoop_EventLoop, getDriver)
 
 static void eventloop_callback_dtor(zval *zv)
 {
-	eventloop_cb_free(Z_PTR_P(zv));
+	eventloop_cb_release(Z_PTR_P(zv));
 }
 
 /* {{{ PHP_GINIT_FUNCTION */
