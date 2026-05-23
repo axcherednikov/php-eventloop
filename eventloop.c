@@ -188,15 +188,8 @@ void eventloop_process_microtasks(void)
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
 
-	while (EVENTLOOP_G(microtask_count) > 0) {
-		mt = EVENTLOOP_G(microtask_queue)[0];
-
-		EVENTLOOP_G(microtask_count)--;
-		if (EVENTLOOP_G(microtask_count) > 0) {
-			memmove(&EVENTLOOP_G(microtask_queue)[0],
-				&EVENTLOOP_G(microtask_queue)[1],
-				sizeof(eventloop_microtask) * EVENTLOOP_G(microtask_count));
-		}
+	while (EVENTLOOP_G(microtask_head) < EVENTLOOP_G(microtask_count)) {
+		mt = EVENTLOOP_G(microtask_queue)[EVENTLOOP_G(microtask_head)++];
 
 		if (zend_fcall_info_init(&mt.closure, 0, &fci, &fcc, NULL, NULL) == SUCCESS) {
 			ZVAL_UNDEF(&retval);
@@ -225,6 +218,9 @@ void eventloop_process_microtasks(void)
 		zval_ptr_dtor(&mt.closure);
 		zval_ptr_dtor(&mt.args);
 	}
+
+	EVENTLOOP_G(microtask_head) = 0;
+	EVENTLOOP_G(microtask_count) = 0;
 }
 /* }}} */
 
@@ -544,12 +540,24 @@ ZEND_METHOD(EventLoop_EventLoop, queue)
 	eventloop_microtask *mt;
 	uint32_t i;
 	uint32_t new_capacity;
+	uint32_t active_count;
 	zval tmp;
 
 	ZEND_PARSE_PARAMETERS_START(1, -1)
 		Z_PARAM_OBJECT_OF_CLASS(closure, zend_ce_closure)
 		Z_PARAM_VARIADIC('+', args, argc)
 	ZEND_PARSE_PARAMETERS_END();
+
+	if (EVENTLOOP_G(microtask_count) >= EVENTLOOP_G(microtask_capacity)) {
+		if (EVENTLOOP_G(microtask_head) > 0) {
+			active_count = EVENTLOOP_G(microtask_count) - EVENTLOOP_G(microtask_head);
+			memmove(&EVENTLOOP_G(microtask_queue)[0],
+				&EVENTLOOP_G(microtask_queue)[EVENTLOOP_G(microtask_head)],
+				sizeof(eventloop_microtask) * active_count);
+			EVENTLOOP_G(microtask_head) = 0;
+			EVENTLOOP_G(microtask_count) = active_count;
+		}
+	}
 
 	if (EVENTLOOP_G(microtask_count) >= EVENTLOOP_G(microtask_capacity)) {
 		if (!eventloop_next_capacity(EVENTLOOP_G(microtask_capacity), 8,
@@ -1222,6 +1230,7 @@ PHP_RINIT_FUNCTION(eventloop)
 	EVENTLOOP_G(deferred_capacity) = 0;
 
 	EVENTLOOP_G(microtask_queue) = NULL;
+	EVENTLOOP_G(microtask_head) = 0;
 	EVENTLOOP_G(microtask_count) = 0;
 	EVENTLOOP_G(microtask_capacity) = 0;
 
@@ -1257,7 +1266,7 @@ PHP_RSHUTDOWN_FUNCTION(eventloop)
 		EVENTLOOP_G(driver) = NULL;
 	}
 
-	for (i = 0; i < EVENTLOOP_G(microtask_count); i++) {
+	for (i = EVENTLOOP_G(microtask_head); i < EVENTLOOP_G(microtask_count); i++) {
 		zval_ptr_dtor(&EVENTLOOP_G(microtask_queue)[i].closure);
 		zval_ptr_dtor(&EVENTLOOP_G(microtask_queue)[i].args);
 	}
