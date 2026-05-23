@@ -23,6 +23,7 @@ eventloop_callback *eventloop_cb_create(eventloop_cb_type type, zval *closure)
 	cb->id = eventloop_generate_id();
 	cb->type = type;
 	cb->flags = EVENTLOOP_CB_FLAG_ENABLED | EVENTLOOP_CB_FLAG_REFERENCED;
+	cb->refcount = 1; /* Held by EVENTLOOP_G(callbacks). */
 	ZVAL_COPY(&cb->closure, closure);
 	cb->heap_index = UINT32_MAX;
 
@@ -41,6 +42,25 @@ void eventloop_cb_free(eventloop_callback *cb)
 	zval_ptr_dtor(&cb->closure);
 	zend_string_release(cb->id);
 	efree(cb);
+}
+
+void eventloop_cb_addref(eventloop_callback *cb)
+{
+	ZEND_ASSERT(cb != NULL);
+	ZEND_ASSERT(cb->refcount > 0);
+
+	cb->refcount++;
+}
+
+void eventloop_cb_release(eventloop_callback *cb)
+{
+	ZEND_ASSERT(cb != NULL);
+	ZEND_ASSERT(cb->refcount > 0);
+
+	cb->refcount--;
+	if (cb->refcount == 0) {
+		eventloop_cb_free(cb);
+	}
 }
 
 eventloop_callback *eventloop_cb_find(const zend_string *id)

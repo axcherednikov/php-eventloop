@@ -57,6 +57,7 @@ struct _eventloop_callback {
 	zend_string *id;
 	eventloop_cb_type type;
 	uint8_t flags;
+	uint32_t refcount;
 	zval closure;
 
 	union {
@@ -146,6 +147,8 @@ double eventloop_now(void);
 /* Callback management */
 eventloop_callback *eventloop_cb_create(eventloop_cb_type type, zval *closure);
 void eventloop_cb_free(eventloop_callback *cb);
+void eventloop_cb_addref(eventloop_callback *cb);
+void eventloop_cb_release(eventloop_callback *cb);
 eventloop_callback *eventloop_cb_find(const zend_string *id);
 void eventloop_cb_enable(eventloop_callback *cb);
 void eventloop_cb_disable(eventloop_callback *cb);
