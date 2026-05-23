@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0 - 2026-05-23
+
+### Fixed
+
+- Routed microtask exceptions through the configured `EventLoop::setErrorHandler()` handler.
+- Stopped microtask processing when the configured error handler throws.
+
+### Changed
+
+- Hardened the CI workflow permissions and avoided persisting checkout credentials.
+- Optimized microtask queue processing to avoid repeated array shifting during dispatch.
+- Added regression coverage for callback cancellation during timer dispatch and error handling.
+
 ## 1.0.2 - 2026-05-23
 
 ### Fixed

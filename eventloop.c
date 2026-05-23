@@ -90,6 +90,45 @@ eventloop_driver *eventloop_select_best_driver(void)
 }
 /* }}} */
 
+static void eventloop_handle_callback_exception(void)
+{
+	if (UNEXPECTED(!EG(exception))) {
+		return;
+	}
+
+	if (Z_TYPE(EVENTLOOP_G(error_handler)) != IS_NULL) {
+		zval error_params[1];
+		zval error_retval;
+		zval exception_zv;
+		zend_fcall_info error_fci;
+		zend_fcall_info_cache error_fcc;
+
+		ZVAL_OBJ_COPY(&exception_zv, EG(exception));
+		zend_clear_exception();
+		ZVAL_COPY_VALUE(&error_params[0], &exception_zv);
+
+		if (zend_fcall_info_init(&EVENTLOOP_G(error_handler), 0,
+		    &error_fci, &error_fcc, NULL, NULL) == SUCCESS) {
+			ZVAL_UNDEF(&error_retval);
+			error_fci.retval = &error_retval;
+			error_fci.param_count = 1;
+			error_fci.params = error_params;
+
+			if (zend_call_function(&error_fci, &error_fcc) == SUCCESS) {
+				zval_ptr_dtor(&error_retval);
+			}
+
+			if (UNEXPECTED(EG(exception))) {
+				EVENTLOOP_G(stopped) = true;
+			}
+		}
+
+		zval_ptr_dtor(&exception_zv);
+	} else {
+		EVENTLOOP_G(stopped) = true;
+	}
+}
+
 /* {{{ eventloop_dispatch_callback */
 void eventloop_dispatch_callback(eventloop_callback *cb)
 {
@@ -137,38 +176,7 @@ void eventloop_dispatch_callback(eventloop_callback *cb)
 		zval_ptr_dtor(&retval);
 	}
 
-	if (UNEXPECTED(EG(exception))) {
-		if (Z_TYPE(EVENTLOOP_G(error_handler)) != IS_NULL) {
-			zval error_params[1];
-			zval error_retval;
-			zval exception_zv;
-			zend_fcall_info error_fci;
-			zend_fcall_info_cache error_fcc;
-
-			ZVAL_OBJ_COPY(&exception_zv, EG(exception));
-			zend_clear_exception();
-			ZVAL_COPY_VALUE(&error_params[0], &exception_zv);
-
-			if (zend_fcall_info_init(&EVENTLOOP_G(error_handler), 0,
-			    &error_fci, &error_fcc, NULL, NULL) == SUCCESS) {
-				ZVAL_UNDEF(&error_retval);
-				error_fci.retval = &error_retval;
-				error_fci.param_count = 1;
-				error_fci.params = error_params;
-
-				if (zend_call_function(&error_fci, &error_fcc) == SUCCESS) {
-					zval_ptr_dtor(&error_retval);
-				}
-
-				if (UNEXPECTED(EG(exception))) {
-					EVENTLOOP_G(stopped) = true;
-				}
-			}
-			zval_ptr_dtor(&exception_zv);
-		} else {
-			EVENTLOOP_G(stopped) = true;
-		}
-	}
+	eventloop_handle_callback_exception();
 
 	zval_ptr_dtor(params);
 
@@ -209,12 +217,20 @@ void eventloop_process_microtasks(void)
 			if (Z_TYPE(mt.args) == IS_ARRAY) {
 				zend_fcall_info_args_clear(&fci, 1);
 			}
-
-			if (UNEXPECTED(EG(exception)) && Z_TYPE(EVENTLOOP_G(error_handler)) == IS_NULL) {
-				EVENTLOOP_G(stopped) = true;
-			}
 		}
 
+		eventloop_handle_callback_exception();
+
+		zval_ptr_dtor(&mt.closure);
+		zval_ptr_dtor(&mt.args);
+
+		if (EVENTLOOP_G(stopped)) {
+			break;
+		}
+	}
+
+	while (EVENTLOOP_G(microtask_head) < EVENTLOOP_G(microtask_count)) {
+		mt = EVENTLOOP_G(microtask_queue)[EVENTLOOP_G(microtask_head)++];
 		zval_ptr_dtor(&mt.closure);
 		zval_ptr_dtor(&mt.args);
 	}
