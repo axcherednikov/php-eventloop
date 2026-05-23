@@ -141,6 +141,11 @@ void eventloop_cb_cancel(eventloop_callback *cb)
 	if (cb->type == EVENTLOOP_CB_READABLE || cb->type == EVENTLOOP_CB_WRITABLE) {
 		EVENTLOOP_G(io_watcher_count)--;
 	}
+#ifndef PHP_WIN32
+	if (cb->type == EVENTLOOP_CB_SIGNAL) {
+		eventloop_signal_callback_cancelled(cb);
+	}
+#endif
 
 	eventloop_cb_disable(cb);
 	cb->flags |= EVENTLOOP_CB_FLAG_CANCELLED;
