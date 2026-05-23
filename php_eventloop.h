@@ -155,6 +155,10 @@ void eventloop_cb_disable(eventloop_callback *cb);
 void eventloop_cb_cancel(eventloop_callback *cb);
 bool eventloop_has_referenced_callbacks(void);
 
+# ifndef PHP_WIN32
+void eventloop_signal_callback_cancelled(eventloop_callback *cb);
+# endif
+
 /* Timer heap */
 void eventloop_timer_heap_init(eventloop_timer_heap *heap);
 void eventloop_timer_heap_destroy(eventloop_timer_heap *heap);

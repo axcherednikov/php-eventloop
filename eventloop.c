@@ -306,11 +306,64 @@ void eventloop_process_timers(void)
 
 #ifndef PHP_WIN32
 static volatile sig_atomic_t pending_signals[32];
+static struct sigaction previous_signal_actions[32];
+static bool signal_handler_installed[32];
 
 static void eventloop_signal_handler(int signo)
 {
 	if (signo >= 0 && signo < 32) {
 		pending_signals[signo] = 1;
+	}
+}
+
+static int eventloop_install_signal_handler(int signo)
+{
+	struct sigaction sa;
+
+	if (!signal_handler_installed[signo]) {
+		if (sigaction(signo, NULL, &previous_signal_actions[signo]) != 0) {
+			return FAILURE;
+		}
+		signal_handler_installed[signo] = true;
+	}
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = eventloop_signal_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART;
+
+	if (sigaction(signo, &sa, NULL) != 0) {
+		sigaction(signo, &previous_signal_actions[signo], NULL);
+		signal_handler_installed[signo] = false;
+		return FAILURE;
+	}
+
+	return SUCCESS;
+}
+
+static void eventloop_restore_signal_handler(int signo)
+{
+	if (signo < 1 || signo >= 32 || !signal_handler_installed[signo]) {
+		return;
+	}
+
+	sigaction(signo, &previous_signal_actions[signo], NULL);
+	signal_handler_installed[signo] = false;
+	pending_signals[signo] = 0;
+	zend_hash_index_del(&EVENTLOOP_G(signal_callbacks), (zend_ulong)signo);
+}
+
+void eventloop_signal_callback_cancelled(eventloop_callback *cb)
+{
+	zval *id_zv;
+
+	if (cb->type != EVENTLOOP_CB_SIGNAL) {
+		return;
+	}
+
+	id_zv = zend_hash_index_find(&EVENTLOOP_G(signal_callbacks), (zend_ulong)cb->signal.signo);
+	if (id_zv && zend_string_equals(Z_STR_P(id_zv), cb->id)) {
+		eventloop_restore_signal_handler(cb->signal.signo);
 	}
 }
 
@@ -626,10 +679,8 @@ ZEND_METHOD(EventLoop_EventLoop, onSignal)
 	zend_long signal;
 	zval *closure;
 	eventloop_callback *cb;
+	zval *existing_id_zv;
 	zval id_zv;
-#ifndef PHP_WIN32
-	struct sigaction sa;
-#endif
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_LONG(signal)
@@ -645,17 +696,27 @@ ZEND_METHOD(EventLoop_EventLoop, onSignal)
 		RETURN_THROWS();
 	}
 
+	existing_id_zv = zend_hash_index_find(&EVENTLOOP_G(signal_callbacks), (zend_ulong)signal);
+	if (existing_id_zv) {
+		eventloop_callback *existing_cb = eventloop_cb_find(Z_STR_P(existing_id_zv));
+		if (existing_cb) {
+			eventloop_cb_cancel(existing_cb);
+		} else {
+			zend_hash_index_del(&EVENTLOOP_G(signal_callbacks), (zend_ulong)signal);
+		}
+	}
+
 	cb = eventloop_cb_create(EVENTLOOP_CB_SIGNAL, closure);
 	cb->signal.signo = (int)signal;
 
+	if (UNEXPECTED(eventloop_install_signal_handler((int)signal) != SUCCESS)) {
+		eventloop_cb_cancel(cb);
+		zend_throw_error(NULL, "Failed to register signal handler");
+		RETURN_THROWS();
+	}
+
 	ZVAL_STR_COPY(&id_zv, cb->id);
 	zend_hash_index_update(&EVENTLOOP_G(signal_callbacks), (zend_ulong)signal, &id_zv);
-
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = eventloop_signal_handler;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = SA_RESTART;
-	sigaction((int)signal, &sa, NULL);
 
 	RETURN_STR_COPY(cb->id);
 #endif
@@ -1108,6 +1169,7 @@ PHP_RINIT_FUNCTION(eventloop)
 
 #ifndef PHP_WIN32
 	memset((void *)pending_signals, 0, sizeof(pending_signals));
+	memset(signal_handler_installed, 0, sizeof(signal_handler_installed));
 #endif
 
 	return SUCCESS;
@@ -1118,6 +1180,12 @@ PHP_RINIT_FUNCTION(eventloop)
 PHP_RSHUTDOWN_FUNCTION(eventloop)
 {
 	uint32_t i;
+
+#ifndef PHP_WIN32
+	for (i = 1; i < 32; i++) {
+		eventloop_restore_signal_handler((int)i);
+	}
+#endif
 
 	if (EVENTLOOP_G(driver)) {
 		EVENTLOOP_G(driver)->shutdown();
